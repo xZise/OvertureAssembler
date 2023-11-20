@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "OvertureAssembler": {
+      "commandName": "Project"
+    },
+    "Profil \"1\"": {
+      "commandName": "Project",
+      "commandLineArgs": "sample.txt"
+    }
+  }
+}
