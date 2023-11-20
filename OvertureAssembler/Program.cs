@@ -12,6 +12,8 @@ namespace OvertureAssembler
             Option<bool> binaryOutput = new("--binary", "Outputs the result as a list of binary values");
             Option<FileInfo?> outputFile = new("--output", "Outputs the result into the file as lines of ASCII decimal numbers");
 
+            Option<bool> enableXorOpcodes = new("--enable-xor", "Enables xor and xnor opcodes.");
+
             rootCommand.Add(file);
             rootCommand.Add(binaryOutput);
             rootCommand.Add(outputFile);
@@ -20,10 +22,13 @@ namespace OvertureAssembler
             inst.SetHandler(Assembler.WriteInstructions);
             rootCommand.Add(inst);
 
-            rootCommand.SetHandler((fileValue, binaryOutputValue, outputFileValue) => {
+            rootCommand.SetHandler((fileValue, binaryOutputValue, outputFileValue, enableXorOpcodesValue) => {
                 string[] lines = File.ReadAllLines(fileValue.FullName);
 
-                Assembler assembler = new();
+                Assembler assembler = new()
+                {
+                    EnableXorOpcodes = enableXorOpcodesValue
+                };
                 byte[] byteCode = assembler.Assemble(lines);
 
                 for (int i = 0; i < byteCode.Length; i++)
@@ -51,7 +56,7 @@ namespace OvertureAssembler
                         sw.WriteLine(code);
                     }
                 }
-            }, file, binaryOutput, outputFile);
+            }, file, binaryOutput, outputFile, enableXorOpcodes);
 
             await rootCommand.InvokeAsync(args);
         }
@@ -74,6 +79,8 @@ namespace OvertureAssembler
         private readonly List<AssemblyMessage> messages = new();
 
         public IReadOnlyList<AssemblyMessage> AssemblyMessages => messages.AsReadOnly();
+
+        public bool EnableXorOpcodes { get; set; }
 
         public void WriteMessages()
         {
@@ -99,6 +106,8 @@ namespace OvertureAssembler
             Console.WriteLine($"  nand - copies the result of 'bitwise nand' between 'r1' and 'r2' into 'r3'");
             Console.WriteLine($"  add  - copies the sum of 'r1' and 'r2' into 'r3'");
             Console.WriteLine($"  sub  - copies the difference between 'r1' and 'r2' into 'r3'");
+            Console.WriteLine($"  xor  - copies the result of 'bitwise xor' between 'r1' and 'r2' into 'r3' (must be enabled)");
+            Console.WriteLine($"  xnor - copies the result of 'bitwise xnor' between 'r1' and 'r2' into 'r3' (must be enabled)");
             Console.WriteLine();
             Console.WriteLine($"Conditional operations");
             Console.WriteLine($"  j [lbl]    - Makes an unconditional jump to the instruction address of 'r0' or 'lbl'");
@@ -429,6 +438,22 @@ namespace OvertureAssembler
                     {
                         byteCode.AddInstruction(Arithmetic.Sub);
                     }
+                    else if (token.Equals("xor"))
+                    {
+                        if (!EnableXorOpcodes)
+                        {
+                            throw token.CreateException("The xor-opcode is only supported in additional codes.");
+                        }
+                        byteCode.AddInstruction(Arithmetic.Xor);
+                    }
+                    else if (token.Equals("xnor"))
+                    {
+                        if (!EnableXorOpcodes)
+                        {
+                            throw token.CreateException("The xnor-opcode is only supported in additional codes.");
+                        }
+                        byteCode.AddInstruction(Arithmetic.Xnor);
+                    }
                     else
                     {
                         throw AssemblyException.UnknownToken(token);
@@ -516,6 +541,8 @@ namespace OvertureAssembler
             Nand = 0b001,
             Add = 0b100,
             Sub = 0b101,
+            Xor = 0b110,  // Additional
+            Xnor = 0b111, // Additional
         }
 
         public const byte MaxImmediate = 0b11_1111;
