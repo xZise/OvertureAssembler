@@ -1,2 +1,7 @@
   label  :
       mov r1 r2
+      li 0x12
+      li 0X12
+      li 12h
+      li 12H
+      li 18

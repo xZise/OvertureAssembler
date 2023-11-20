@@ -70,7 +70,7 @@
             Console.WriteLine($"  Note: When 'lbl' is present, it'll insert an immediate load to the label and overwrite 'r0'!");
             Console.WriteLine();
             Console.WriteLine($"- Labels are indicated by a name and colon (:)");
-            Console.WriteLine($"- Immediates are encoded in decimal");
+            Console.WriteLine($"- Immediates are encoded in decimal. In hexadecimal when it is either prefixed by '0x' or suffixed by 'h'.");
         }
 
         public record struct Reference(byte Offset, int LineNumber);
@@ -103,6 +103,30 @@
                 labels[name] = labelObj;
             }
             return labelObj;
+        }
+
+        private static bool TryParse(ReadOnlySpan<char> token, out byte result)
+        {
+            bool asHex;
+            if (token.StartsWith("0x", StringComparison.InvariantCultureIgnoreCase))
+            {
+                token = token[2..];
+                asHex = true;
+            }
+            else if (token[^1] == 'h' || token[^1] == 'H')
+            {
+                token = token[..^1];
+                asHex = true;
+            }
+            else
+            {
+                asHex = false;
+            }
+            if (asHex)
+            {
+                return byte.TryParse(token, System.Globalization.NumberStyles.HexNumber, null, out result);
+            }
+            return byte.TryParse(token, out result);
         }
 
         public byte[] Assemble(string[] lines)
@@ -155,7 +179,7 @@
                         opcode = OpCode.Immediate;
 
                         ReadOnlySpan<char> value = NextToken(line, ref offset);
-                        if (!byte.TryParse(value, out byte immediateValue) || immediateValue > MaxImmediate)
+                        if (!TryParse(value, out byte immediateValue) || immediateValue > MaxImmediate)
                         {
                             throw new InvalidOperationException($"Immediate value must be a number in range 0 - {MaxImmediate}");
                         }
