@@ -1,51 +1,64 @@
-﻿namespace OvertureAssembler
+﻿using System.CommandLine;
+using System.ComponentModel.Design;
+
+namespace OvertureAssembler
 {
     internal class Program
     {
-
-        static void Main(string[] args)
+        static async Task Main(string[] args)
         {
-            if (args.Length == 0 || (args.Length == 1 && (args[0] == "--help" || args[0] == "-h")))
-            {
-                Assembler.WriteHelp();
-                return;
-            }
+            RootCommand rootCommand = new("An assembler for the OVERTURE architecture in 'Turing Complete'");
 
-            if (args.Length == 1 && args[0] == "--inst")
-            {
-                Assembler.WriteInstructions();
-                return;
-            }
+            Argument<FileInfo> file = new("file", "Location of the assembly file");
+            Option<bool> binaryOutput = new("--binary", "Outputs the result as a list of binary values");
+            Option<FileInfo?> outputFile = new("--output", "Outputs the result into the file as lines of ASCII decimal numbers");
 
-            if (args.Length > 1)
-            {
-                Console.Error.WriteLine("Supports only one file at the moment");
-                return;
-            }
+            rootCommand.Add(file);
+            rootCommand.Add(binaryOutput);
+            rootCommand.Add(outputFile);
 
-            string[] lines = File.ReadAllLines(args[0]);
+            Command inst = new("--inst", "Prints a list of instructions");
+            inst.SetHandler(Assembler.WriteInstructions);
+            rootCommand.Add(inst);
 
-            Assembler assembler = new Assembler();
-            byte[] byteCode = assembler.Assemble(lines);
+            rootCommand.SetHandler((fileValue, binaryOutputValue, outputFileValue) => {
+                string[] lines = File.ReadAllLines(fileValue.FullName);
 
-            for (int i = 0; i < byteCode.Length; i++)
-            {
-                byte code = byteCode[i];
-                Console.WriteLine($"{i:x3}: {code:b8}");
-            }
+                Assembler assembler = new();
+                byte[] byteCode = assembler.Assemble(lines);
+
+                for (int i = 0; i < byteCode.Length; i++)
+                {
+                    byte code = byteCode[i];
+                    if (binaryOutputValue)
+                    {
+                        Console.WriteLine($"{i:x3}: {code:b8}");
+                    }
+                    else
+                    {
+                        Console.WriteLine(code);
+                    }
+                }
+
+                if (outputFileValue != null)
+                {
+                    using FileStream s = outputFileValue.Open(FileMode.Create);
+                    using StreamWriter sw = new(s);
+
+                    foreach (byte code in byteCode)
+                    {
+                        sw.WriteLine(code);
+                    }
+                }
+            }, file, binaryOutput, outputFile);
+
+            await rootCommand.InvokeAsync(args);
         }
     }
 
     public class Assembler
     {
         private readonly Dictionary<string, Label> labels = new();
-
-        public static void WriteHelp()
-        {
-            Console.WriteLine("Compilies the instructions of the file to OVERTURE architecture.");
-            Console.WriteLine("  --help - prints this help");
-            Console.WriteLine("  --inst - prints a list of instructions");
-        }
 
         public static void WriteInstructions()
         {
