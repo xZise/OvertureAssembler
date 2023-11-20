@@ -13,6 +13,7 @@ namespace OvertureAssembler
             Option<FileInfo?> outputFile = new("--output", "Outputs the result into the file as lines of ASCII decimal numbers");
 
             Option<bool> enableXorOpcodes = new("--enable-xor", "Enables xor and xnor opcodes.");
+            Option<bool> enableRelativeJumps = new("--enable-relative-jumps", "Enables relative jumps");
 
             rootCommand.Add(file);
             rootCommand.Add(binaryOutput);
@@ -22,12 +23,13 @@ namespace OvertureAssembler
             inst.SetHandler(Assembler.WriteInstructions);
             rootCommand.Add(inst);
 
-            rootCommand.SetHandler((fileValue, binaryOutputValue, outputFileValue, enableXorOpcodesValue) => {
+            rootCommand.SetHandler((fileValue, binaryOutputValue, outputFileValue, enableXorOpcodesValue, enableRelativeJumpsValue) => {
                 string[] lines = File.ReadAllLines(fileValue.FullName);
 
                 Assembler assembler = new()
                 {
-                    EnableXorOpcodes = enableXorOpcodesValue
+                    EnableXorOpcodes = enableXorOpcodesValue,
+                    EnableRelativeJumps = enableRelativeJumpsValue,
                 };
                 byte[] byteCode = assembler.Assemble(lines);
 
@@ -56,7 +58,7 @@ namespace OvertureAssembler
                         sw.WriteLine(code);
                     }
                 }
-            }, file, binaryOutput, outputFile, enableXorOpcodes);
+            }, file, binaryOutput, outputFile, enableXorOpcodes, enableRelativeJumps);
 
             await rootCommand.InvokeAsync(args);
         }
@@ -81,6 +83,7 @@ namespace OvertureAssembler
         public IReadOnlyList<AssemblyMessage> AssemblyMessages => messages.AsReadOnly();
 
         public bool EnableXorOpcodes { get; set; }
+        public bool EnableRelativeJumps { get; set; }
 
         public void WriteMessages()
         {
@@ -98,6 +101,7 @@ namespace OvertureAssembler
             Console.WriteLine($"  mov <dest> <src> - copies the value from register 'src' to 'dest'. Can be any register r0 to r5 and in (src only) or out (dest only).");
             Console.WriteLine($"                     (src and dest must be different when they aren't in and out)");
             Console.WriteLine($"  li <imm>         - loads the immediate value ('imm') into register 0. The immediate must be in range 0 to {MaxImmediate}.");
+            Console.WriteLine($"  lsi <signed imm> - loads the signed immediate value ('signed imm') into register 0. The immediate must be in range {MinSignedImmediate} to {MaxSignedImmediate}");
             Console.WriteLine();
             Console.WriteLine($"Arithmetic operations");
             Console.WriteLine($"  or   - copies the result of 'bitwise or' between 'r1' and 'r2' into 'r3'");
@@ -120,7 +124,7 @@ namespace OvertureAssembler
             Console.WriteLine($"  Note: When 'lbl' is present, it'll insert an immediate load to the label and overwrite 'r0'!");
             Console.WriteLine();
             Console.WriteLine($"- Labels are indicated by a name and colon (:)");
-            Console.WriteLine($"- Immediates are by default encoded in decimal. In hexadecimal when it is either prefixed by '0x' or suffixed by 'h'. In binary when it is prefixed by '0b'.");
+            Console.WriteLine($"- Immediates are by default encoded in decimal. Unsigned immediates can also be encoded in hexadecimal by either prefixing with '0x' or suffixing with 'h'. They can also be encoded in binary by prefixing with '0b'.");
             Console.WriteLine($"- Everything after '#' is ignored.");
         }
 
@@ -348,6 +352,16 @@ namespace OvertureAssembler
 
                         byteCode.AddInstruction(immediateValue);
                     }
+                    else if (token.Equals("lsi"))
+                    {
+                        Token value = tokenizer.NextToken();
+                        if (!sbyte.TryParse(value.Span, out sbyte immediateValue) || immediateValue < MinSignedImmediate || immediateValue > MaxSignedImmediate)
+                        {
+                            throw value.CreateException($"Immediate value must be a number in range {MinSignedImmediate} - {MaxSignedImmediate}");
+                        }
+
+                        byteCode.AddInstruction((byte)(immediateValue & MaxImmediate));
+                    }
                     else if (token.Equals("mov"))
                     {
                         Token destination = tokenizer.NextToken();
@@ -492,6 +506,21 @@ namespace OvertureAssembler
                     {
                         if (absoluteOffset > Assembler.MaxImmediate)
                         {
+                            if (!byteCode.Failed && EnableRelativeJumps)
+                            {
+                                // TODO: Verify range checks/overflows
+                                byte maxRelativeOffset = MaxImmediate >> 1;
+                                sbyte relativeOffset = (sbyte)(absoluteOffset - reference.Offset);
+                                if (Math.Abs(relativeOffset) < maxRelativeOffset)
+                                {
+                                    // TODO: Verify that the immediate has the correct sign extension (e.g. 5th bit is set for negative)
+                                    byteCode.Bytes[reference.Offset] = (byte)(MaxImmediate & relativeOffset);
+                                    // Set "relative jump"-flag. Might be improved so that it isn't hardcoded?
+                                    byteCode.Bytes[reference.Offset + 1] |= 0b00_001_000;
+                                    continue;
+                                }
+                            }
+
                             byteCode.Fail();
                             AddError(label.Offset.Value.Location, $"Location of label '{label.Name}' is outside of the maximum immediate possible.");
                             break;
@@ -546,6 +575,8 @@ namespace OvertureAssembler
         }
 
         public const byte MaxImmediate = 0b11_1111;
+        public const sbyte MaxSignedImmediate = MaxImmediate >> 1;
+        public const sbyte MinSignedImmediate = -(MaxSignedImmediate + 1);
 
         private const string InputRegisterName = "in";
         private const string OutputRegisterName = "out";

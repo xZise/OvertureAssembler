@@ -12,6 +12,8 @@ namespace OvertureAssemblerTest
         [InlineData(0b01_000_001, "nand")]
         [InlineData(0b01_000_100, "add")]
         [InlineData(0b01_000_101, "sub")]
+        [InlineData(0b01_000_110, "xor")]
+        [InlineData(0b01_000_111, "xnor")]
         
         [InlineData(0b10_000_001, "mov r1 r0")]
         [InlineData(0b10_000_010, "mov r2 r0")]
