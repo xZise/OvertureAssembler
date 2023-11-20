@@ -70,7 +70,7 @@
             Console.WriteLine($"  Note: When 'lbl' is present, it'll insert an immediate load to the label and overwrite 'r0'!");
             Console.WriteLine();
             Console.WriteLine($"- Labels are indicated by a name and colon (:)");
-            Console.WriteLine($"- Immediates are encoded in decimal. In hexadecimal when it is either prefixed by '0x' or suffixed by 'h'.");
+            Console.WriteLine($"- Immediates are by default encoded in decimal. In hexadecimal when it is either prefixed by '0x' or suffixed by 'h'. In binary when it is prefixed by '0b'.");
         }
 
         public record struct Reference(byte Offset, int LineNumber);
@@ -107,26 +107,27 @@
 
         private static bool TryParse(ReadOnlySpan<char> token, out byte result)
         {
-            bool asHex;
+            System.Globalization.NumberStyles numberStyle;
             if (token.StartsWith("0x", StringComparison.InvariantCultureIgnoreCase))
             {
                 token = token[2..];
-                asHex = true;
+                numberStyle = System.Globalization.NumberStyles.HexNumber;
             }
             else if (token[^1] == 'h' || token[^1] == 'H')
             {
                 token = token[..^1];
-                asHex = true;
+                numberStyle = System.Globalization.NumberStyles.HexNumber;
+            }
+            else if (token.StartsWith("0b", StringComparison.InvariantCultureIgnoreCase))
+            {
+                token = token[2..];
+                numberStyle = System.Globalization.NumberStyles.BinaryNumber;
             }
             else
             {
-                asHex = false;
+                numberStyle = System.Globalization.NumberStyles.Integer;
             }
-            if (asHex)
-            {
-                return byte.TryParse(token, System.Globalization.NumberStyles.HexNumber, null, out result);
-            }
-            return byte.TryParse(token, out result);
+            return byte.TryParse(token, numberStyle, null, out result);
         }
 
         public byte[] Assemble(string[] lines)
