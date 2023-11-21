@@ -398,6 +398,7 @@ namespace OvertureAssembler
 
         private ref struct Tokenizer
         {
+            public const char CommentChar = '#';
             public const char LabelChar = ':';
 
             public string Line;
@@ -408,6 +409,14 @@ namespace OvertureAssembler
             public readonly bool AtEnd => offset >= Line.Length;
 
             public Tokenizer(string line) => Line = line;
+
+            private void CheckComment()
+            {
+                if (!AtEnd && Current == CommentChar)
+                {
+                    offset = Line.Length;
+                }
+            }
 
             public bool NextChar()
             {
@@ -431,12 +440,16 @@ namespace OvertureAssembler
                     offset++;
                 }
 
+                CheckComment();
+
                 int startIndex = offset;
-                while (!AtEnd && !(char.IsWhiteSpace(Current) || Current == LabelChar))
+                while (!AtEnd && !(char.IsWhiteSpace(Current) || Current == LabelChar || Current == CommentChar))
                 {
                     offset++;
                 }
                 int endIndex = offset;
+
+                CheckComment();
 
                 return Line.AsSpan(startIndex, endIndex - startIndex);
             }

@@ -1,9 +1,10 @@
   label  :
       mov r1 r2
+      #load same immediate value in hex, binary or decimal
       li 0x12
       li 0X12
       li 12h
-      li 12H
+      li 12H   # Only a suffix or prefix works
       li 0b00010010
       li 0B00010010
       li 18
