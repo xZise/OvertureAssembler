@@ -152,34 +152,34 @@ namespace OvertureAssembler
 
             for (int lineNumber = 1; lineNumber <= lines.Length; lineNumber++)
             {
-                string line = lines[lineNumber - 1];
+                Tokenizer tokenizer = new(lines[lineNumber - 1]);
 
                 OpCode opcode;
                 byte data;
                 try
                 {
-                    int offset = 0;
-                    ReadOnlySpan<char> token = NextToken(line, ref offset);
+                    ReadOnlySpan<char> token = tokenizer.NextToken();
 
                     if (token.Length == 0)
                     {
                         continue;
                     }
 
-                    for (int i = offset; i < line.Length; i++)
+                    while (!tokenizer.AtEnd)
                     {
-                        if (line[i] == ':')
+                        if (tokenizer.Current == Tokenizer.LabelChar)
                         {
                             Label label = GetLabel(token.ToString());
                             label.Offset = new((byte)byteCode.Count, lineNumber);
-                            offset = i + 1;
-                            token = NextToken(line, ref offset);
+                            tokenizer.NextChar();
+                            token = tokenizer.NextToken();
                             break;
                         }
-                        else if (!char.IsWhiteSpace(line[i]))
+                        else if (!char.IsWhiteSpace(tokenizer.Current))
                         {
                             break;
                         }
+                        tokenizer.NextChar();
                     }
 
                     if (token.Length == 0)
@@ -191,7 +191,7 @@ namespace OvertureAssembler
                     {
                         opcode = OpCode.Immediate;
 
-                        ReadOnlySpan<char> value = NextToken(line, ref offset);
+                        ReadOnlySpan<char> value = tokenizer.NextToken();
                         if (!TryParse(value, out byte immediateValue) || immediateValue > MaxImmediate)
                         {
                             throw new InvalidOperationException($"Immediate value must be a number in range 0 - {MaxImmediate}");
@@ -201,8 +201,8 @@ namespace OvertureAssembler
                     }
                     else if (MemoryExtensions.Equals(token, "mov", StringComparison.InvariantCulture))
                     {
-                        ReadOnlySpan<char> destination = NextToken(line, ref offset);
-                        ReadOnlySpan<char> source = NextToken(line, ref offset);
+                        ReadOnlySpan<char> destination = tokenizer.NextToken();
+                        ReadOnlySpan<char> source = tokenizer.NextToken();
 
                         opcode = OpCode.Move;
 
@@ -249,7 +249,7 @@ namespace OvertureAssembler
                         }
                         data = (byte)condition;
 
-                        ReadOnlySpan<char> labelName = NextToken(line, ref offset);
+                        ReadOnlySpan<char> labelName = tokenizer.NextToken();
                         if (labelName.Length > 0)
                         {
                             Label label = GetLabel(labelName.ToString());
@@ -396,20 +396,50 @@ namespace OvertureAssembler
             throw new InvalidOperationException($"Unknown register name '{registerName}'");
         }
 
-        static ReadOnlySpan<char> NextToken(string keyword, ref int offset)
+        private ref struct Tokenizer
         {
-            while (offset < keyword.Length && char.IsWhiteSpace(keyword[offset]))
-            {
-                offset++;
-            }
-            int startIndex = offset;
+            public const char LabelChar = ':';
 
-            while (offset < keyword.Length && !(char.IsWhiteSpace(keyword[offset]) || keyword[offset] == ':'))
+            public string Line;
+            private int offset;
+
+            public readonly char Current => Line[offset];
+
+            public readonly bool AtEnd => offset >= Line.Length;
+
+            public Tokenizer(string line) => Line = line;
+
+            public bool NextChar()
             {
-                offset++;
+                if (!AtEnd)
+                {
+                    offset++;
+                    return true;
+                }
+                return false;
             }
-            int endIndex = offset;
-            return keyword.AsSpan(startIndex, endIndex - startIndex);
+
+            public ReadOnlySpan<char> NextToken()
+            {
+                if (AtEnd)
+                {
+                    return [];
+                }
+
+                while (!AtEnd && char.IsWhiteSpace(Current))
+                {
+                    offset++;
+                }
+
+                int startIndex = offset;
+                while (!AtEnd && !(char.IsWhiteSpace(Current) || Current == LabelChar))
+                {
+                    offset++;
+                }
+                int endIndex = offset;
+
+                return Line.AsSpan(startIndex, endIndex - startIndex);
+            }
         }
     }
 }
