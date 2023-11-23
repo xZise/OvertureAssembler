@@ -91,22 +91,18 @@ namespace OvertureAssembler
 
         public class Label(string name)
         {
-            private Reference? offset;
-
             public string Name { get; } = name;
-            public Reference? Offset
-            {
-                get => offset;
-                set
-                {
-                    if (offset.HasValue)
-                    {
-                        throw new InvalidOperationException($"Multiple declarations of label '{Name}' already in line {offset.Value.LineNumber}");
-                    }
-                    offset = value;
-                }
-            }
+            public Reference? Offset { get; private set; }
             public List<Reference> References { get; } = [];
+
+            public void SetOffset(Reference offset)
+            {
+                if (Offset.HasValue)
+                {
+                    throw new InvalidOperationException($"Multiple declarations of label '{Name}' already in line {Offset.Value.LineNumber}");
+                }
+                Offset = offset;
+            }
         }
 
         private Label GetLabel(string name)
@@ -171,7 +167,7 @@ namespace OvertureAssembler
                         if (tokenizer.Current == Tokenizer.LabelChar)
                         {
                             Label label = GetLabel(token.ToString());
-                            label.Offset = new((byte)byteCode.Count, lineNumber);
+                            label.SetOffset(new((byte)byteCode.Count, lineNumber));
                             tokenizer.NextChar();
                             token = tokenizer.NextToken();
                             break;
