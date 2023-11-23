@@ -154,9 +154,8 @@ namespace OvertureAssembler
             {
                 string line = lines[lineNumber - 1];
 
-                OpCode opcode = OpCode.Immediate;
-                byte data = 0;
-                bool validLine = true;
+                OpCode opcode;
+                byte data;
                 try
                 {
                     int offset = 0;
@@ -261,26 +260,32 @@ namespace OvertureAssembler
                     else if (MemoryExtensions.Equals(token, "and", StringComparison.InvariantCulture))
                     {
                         data = (byte)Arithmetic.And;
+                        opcode = OpCode.Calculate;
                     }
                     else if (MemoryExtensions.Equals(token, "nand", StringComparison.InvariantCulture))
                     {
                         data = (byte)Arithmetic.Nand;
+                        opcode = OpCode.Calculate;
                     }
                     else if (MemoryExtensions.Equals(token, "or", StringComparison.InvariantCulture))
                     {
                         data = (byte)Arithmetic.Or;
+                        opcode = OpCode.Calculate;
                     }
                     else if (MemoryExtensions.Equals(token, "nor", StringComparison.InvariantCulture))
                     {
                         data = (byte)Arithmetic.Nor;
+                        opcode = OpCode.Calculate;
                     }
                     else if (MemoryExtensions.Equals(token, "add", StringComparison.InvariantCulture))
                     {
                         data = (byte)Arithmetic.Add;
+                        opcode = OpCode.Calculate;
                     }
                     else if (MemoryExtensions.Equals(token, "sub", StringComparison.InvariantCulture))
                     {
                         data = (byte)Arithmetic.Sub;
+                        opcode = OpCode.Calculate;
                     }
                     else
                     {
@@ -290,22 +295,19 @@ namespace OvertureAssembler
                 catch (InvalidOperationException ex)
                 {
                     Console.WriteLine($"Assembly error in line #{lineNumber}: {ex.Message}");
-                    validLine = false;
+
+                    // As soon as one error occurred, we still try to assemble the following instructions, but do not
+                    // output any result (only further warnings or errors).
+                    validProgram = false;
+
+                    continue;
                 }
 
                 if (validProgram)
                 {
-                    if (validLine)
-                    {
-                        data |= (byte)((byte)opcode << 6);
+                    data |= (byte)((byte)opcode << 6);
 
-                        byteCode.Add(data);
-                    }
-                    else
-                    {
-                        validProgram = false;
-                        byteCode.Clear();
-                    }
+                    byteCode.Add(data);
                 }
             }
 
@@ -326,11 +328,21 @@ namespace OvertureAssembler
                     {
                         if (absoluteOffset > Assembler.MaxImmediate)
                         {
+                            validProgram = false;
                             throw new InvalidOperationException($"Location of label '{label.Name}' is outside of the maximum immediate possible.");
                         }
-                        byteCode[reference.Offset] = absoluteOffset;
+
+                        if (validProgram)
+                        {
+                            byteCode[reference.Offset] = absoluteOffset;
+                        }
                     }
                 }
+            }
+
+            if (!validProgram)
+            {
+                return [];
             }
 
             return byteCode.ToArray();
