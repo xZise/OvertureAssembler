@@ -116,6 +116,66 @@ namespace OvertureAssembler
             }
         }
 
+        private ref struct ByteCode
+        {
+            public readonly Span<byte> Bytes;
+            public bool Failed { readonly get; private set; }
+            public readonly byte Cursor => Failed ? (byte)0 : cursor;
+
+            private byte cursor;
+
+            public ByteCode(Span<byte> bytes)
+            {
+                Bytes = bytes;
+                Failed = false;
+                cursor = 0;
+            }
+
+            private void AddInstruction(OpCode opcode, byte data)
+            {
+                if (Failed) return;
+
+                if ((data & ~MaxImmediate) > 0)
+                {
+                    throw new InvalidOperationException("Data clobbers the opcode portion");
+                }
+                byte inst = (byte)(data | (byte)opcode << 6);
+                Add(inst);
+            }
+
+            public void Add(byte value) => Bytes[cursor++] = value;
+
+            public void AddInstruction(byte immediate)
+            {
+                if (immediate > MaxImmediate)
+                {
+                    throw new InvalidOperationException("Immediate value outside range");
+                }
+                AddInstruction(OpCode.Immediate, immediate);
+            }
+
+            public void AddInstruction(Arithmetic arithmetic)
+            {
+                AddInstruction(OpCode.Calculate, (byte)arithmetic);
+            }
+
+            public void AddInstruction(Condition condition)
+            {
+                AddInstruction(OpCode.Conditional, (byte)condition);
+            }
+
+            public void AddInstruction(Register destinationRegister, Register sourceRegister)
+            {
+                if (!Enum.IsDefined(destinationRegister) || !Enum.IsDefined(sourceRegister))
+                {
+                    throw new InvalidOperationException("Undefined register index");
+                }
+                AddInstruction(OpCode.Move, (byte)(((byte)sourceRegister << 3) | (byte)destinationRegister));
+            }
+
+            public void Fail() => Failed = true;
+        }
+
         private Label GetLabel(string name)
         {
             if (!labels.TryGetValue(name, out Label? labelObj))
@@ -155,15 +215,13 @@ namespace OvertureAssembler
         {
             labels.Clear();
 
-            List<byte> byteCode = [];
-            bool validProgram = true;
+            Span<byte> bytes = stackalloc byte[256];
+            ByteCode byteCode = new(bytes);
 
             for (int lineNumber = 1; lineNumber <= lines.Length; lineNumber++)
             {
                 Tokenizer tokenizer = new(lines[lineNumber - 1]);
 
-                OpCode opcode;
-                byte data;
                 try
                 {
                     ReadOnlySpan<char> token = tokenizer.NextToken();
@@ -178,7 +236,7 @@ namespace OvertureAssembler
                         if (tokenizer.Current == Tokenizer.LabelChar)
                         {
                             Label label = GetLabel(token.ToString());
-                            label.SetOffset(new((byte)byteCode.Count, lineNumber));
+                            label.SetOffset(new(byteCode.Cursor, lineNumber));
                             tokenizer.NextChar();
                             token = tokenizer.NextToken();
                             break;
@@ -197,31 +255,26 @@ namespace OvertureAssembler
 
                     if (MemoryExtensions.Equals(token, "li", StringComparison.InvariantCulture))
                     {
-                        opcode = OpCode.Immediate;
-
                         ReadOnlySpan<char> value = tokenizer.NextToken();
                         if (!TryParse(value, out byte immediateValue) || immediateValue > MaxImmediate)
                         {
                             throw new InvalidOperationException($"Immediate value must be a number in range 0 - {MaxImmediate}");
                         }
 
-                        data = immediateValue;
+                        byteCode.AddInstruction(immediateValue);
                     }
                     else if (MemoryExtensions.Equals(token, "mov", StringComparison.InvariantCulture))
                     {
                         ReadOnlySpan<char> destination = tokenizer.NextToken();
                         ReadOnlySpan<char> source = tokenizer.NextToken();
 
-                        opcode = OpCode.Move;
-
                         Register destinationRegister = ParseRegisterName(destination, OutputRegisterName);
                         Register sourceRegister = ParseRegisterName(source, InputRegisterName);
 
-                        data = (byte)(((byte)sourceRegister << 3) | (byte)destinationRegister);
+                        byteCode.AddInstruction(destinationRegister, sourceRegister);
                     }
                     else if (token.Length >= 1 && token[0] == 'j')
                     {
-                        opcode = OpCode.Conditional;
                         Condition condition;
                         if (MemoryExtensions.Equals(token, "j", StringComparison.InvariantCulture))
                         {
@@ -255,45 +308,44 @@ namespace OvertureAssembler
                         {
                             throw new InvalidOperationException($"Unknown token '{token}'");
                         }
-                        data = (byte)condition;
+                        byteCode.AddInstruction(condition);
 
                         ReadOnlySpan<char> labelName = tokenizer.NextToken();
                         if (labelName.Length > 0)
                         {
                             Label label = GetLabel(labelName.ToString());
-                            label.References.Add(new((byte)byteCode.Count, lineNumber));
-                            byteCode.Add(0xFF);
+                            byte offset = 0;
+                            if (!byteCode.Failed)
+                            {
+                                offset = byteCode.Cursor;
+                                byteCode.Add(0xFF);
+                            }
+                            label.References.Add(new(offset, lineNumber));
                         }
                     }
                     else if (MemoryExtensions.Equals(token, "and", StringComparison.InvariantCulture))
                     {
-                        data = (byte)Arithmetic.And;
-                        opcode = OpCode.Calculate;
+                        byteCode.AddInstruction(Arithmetic.And);
                     }
                     else if (MemoryExtensions.Equals(token, "nand", StringComparison.InvariantCulture))
                     {
-                        data = (byte)Arithmetic.Nand;
-                        opcode = OpCode.Calculate;
+                        byteCode.AddInstruction(Arithmetic.Nand);
                     }
                     else if (MemoryExtensions.Equals(token, "or", StringComparison.InvariantCulture))
                     {
-                        data = (byte)Arithmetic.Or;
-                        opcode = OpCode.Calculate;
+                        byteCode.AddInstruction(Arithmetic.Or);
                     }
                     else if (MemoryExtensions.Equals(token, "nor", StringComparison.InvariantCulture))
                     {
-                        data = (byte)Arithmetic.Nor;
-                        opcode = OpCode.Calculate;
+                        byteCode.AddInstruction(Arithmetic.Nor);
                     }
                     else if (MemoryExtensions.Equals(token, "add", StringComparison.InvariantCulture))
                     {
-                        data = (byte)Arithmetic.Add;
-                        opcode = OpCode.Calculate;
+                        byteCode.AddInstruction(Arithmetic.Add);
                     }
                     else if (MemoryExtensions.Equals(token, "sub", StringComparison.InvariantCulture))
                     {
-                        data = (byte)Arithmetic.Sub;
-                        opcode = OpCode.Calculate;
+                        byteCode.AddInstruction(Arithmetic.Sub);
                     }
                     else
                     {
@@ -306,16 +358,9 @@ namespace OvertureAssembler
 
                     // As soon as one error occurred, we still try to assemble the following instructions, but do not
                     // output any result (only further warnings or errors).
-                    validProgram = false;
+                    byteCode.Fail();
 
                     continue;
-                }
-
-                if (validProgram)
-                {
-                    data |= (byte)((byte)opcode << 6);
-
-                    byteCode.Add(data);
                 }
             }
 
@@ -324,6 +369,7 @@ namespace OvertureAssembler
                 if (!label.Offset.HasValue)
                 {
                     Console.WriteLine($"Unknown label '{label.Name}' referenced in line {string.Join(", ", label.References.Select(r => r.LineNumber))}");
+                    byteCode.Fail();
                 }
                 else if (label.References.Count == 0)
                 {
@@ -336,24 +382,24 @@ namespace OvertureAssembler
                     {
                         if (absoluteOffset > Assembler.MaxImmediate)
                         {
-                            validProgram = false;
+                            byteCode.Fail();
                             throw new InvalidOperationException($"Location of label '{label.Name}' is outside of the maximum immediate possible.");
                         }
 
-                        if (validProgram)
+                        if (!byteCode.Failed)
                         {
-                            byteCode[reference.Offset] = absoluteOffset;
+                            byteCode.Bytes[reference.Offset] = absoluteOffset;
                         }
                     }
                 }
             }
 
-            if (!validProgram)
+            if (byteCode.Failed)
             {
                 return [];
             }
 
-            return byteCode.ToArray();
+            return byteCode.Bytes[..byteCode.Cursor].ToArray();
         }
 
         public enum OpCode : byte
