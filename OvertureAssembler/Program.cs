@@ -56,6 +56,17 @@ namespace OvertureAssembler
         }
     }
 
+    public enum Register : byte
+    {
+        r0 = 0b000,
+        r1 = 0b001,
+        r2 = 0b010,
+        r3 = 0b011,
+        r4 = 0b100,
+        r5 = 0b101,
+        inOut = 0b110,
+    }
+
     public class Assembler
     {
         private readonly Dictionary<string, Label> labels = new();
@@ -203,10 +214,10 @@ namespace OvertureAssembler
 
                         opcode = OpCode.Move;
 
-                        byte destinationRegister = ParseRegisterName(destination, OutputRegisterName);
-                        byte sourceRegister = ParseRegisterName(source, InputRegisterName);
+                        Register destinationRegister = ParseRegisterName(destination, OutputRegisterName);
+                        Register sourceRegister = ParseRegisterName(source, InputRegisterName);
 
-                        data = (byte)((sourceRegister << 3) | destinationRegister);
+                        data = (byte)(((byte)sourceRegister << 3) | (byte)destinationRegister);
                     }
                     else if (token.Length >= 1 && token[0] == 'j')
                     {
@@ -380,15 +391,15 @@ namespace OvertureAssembler
         private const string InputRegisterName = "in";
         private const string OutputRegisterName = "out";
 
-        private static byte ParseRegisterName(ReadOnlySpan<char> registerName, string inOutRegisterName)
+        private static Register ParseRegisterName(ReadOnlySpan<char> registerName, string inOutRegisterName)
         {
-            if (MemoryExtensions.Equals(registerName, "r0", StringComparison.InvariantCulture)) return 0b000;
-            else if (MemoryExtensions.Equals(registerName, "r1", StringComparison.InvariantCulture)) return 0b001;
-            else if (MemoryExtensions.Equals(registerName, "r2", StringComparison.InvariantCulture)) return 0b010;
-            else if (MemoryExtensions.Equals(registerName, "r3", StringComparison.InvariantCulture)) return 0b011;
-            else if (MemoryExtensions.Equals(registerName, "r4", StringComparison.InvariantCulture)) return 0b100;
-            else if (MemoryExtensions.Equals(registerName, "r5", StringComparison.InvariantCulture)) return 0b101;
-            else if (MemoryExtensions.Equals(registerName, inOutRegisterName, StringComparison.InvariantCulture)) return 0b110;
+            if (MemoryExtensions.Equals(registerName, "r0", StringComparison.InvariantCulture)) return Register.r0;
+            else if (MemoryExtensions.Equals(registerName, "r1", StringComparison.InvariantCulture)) return Register.r1;
+            else if (MemoryExtensions.Equals(registerName, "r2", StringComparison.InvariantCulture)) return Register.r2;
+            else if (MemoryExtensions.Equals(registerName, "r3", StringComparison.InvariantCulture)) return Register.r3;
+            else if (MemoryExtensions.Equals(registerName, "r4", StringComparison.InvariantCulture)) return Register.r4;
+            else if (MemoryExtensions.Equals(registerName, "r5", StringComparison.InvariantCulture)) return Register.r5;
+            else if (MemoryExtensions.Equals(registerName, inOutRegisterName, StringComparison.InvariantCulture)) return Register.inOut;
 
             throw new InvalidOperationException($"Unknown register name '{registerName}'");
         }
