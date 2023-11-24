@@ -136,6 +136,8 @@ namespace OvertureAssembler
             }
 
             public bool Equals(string name) => MemoryExtensions.Equals(Span, name, StringComparison.InvariantCulture);
+
+            public AssemblyException CreateException(string message) => new(message, Column);
         }
 
         public class Label(string name)
@@ -260,7 +262,7 @@ namespace OvertureAssembler
 
             public static AssemblyException UnknownToken(Token token)
             {
-                return new AssemblyException($"Unknown token '{token.Span}'", token.Column);
+                return token.CreateException($"Unknown token '{token.Span}'");
             }
         }
 
@@ -332,7 +334,7 @@ namespace OvertureAssembler
                         Token value = tokenizer.NextToken();
                         if (!TryParse(value.Span, out byte immediateValue) || immediateValue > MaxImmediate)
                         {
-                            throw new AssemblyException($"Immediate value must be a number in range 0 - {MaxImmediate}", value.Column);
+                            throw value.CreateException($"Immediate value must be a number in range 0 - {MaxImmediate}");
                         }
 
                         byteCode.AddInstruction(immediateValue);
@@ -347,7 +349,7 @@ namespace OvertureAssembler
 
                         if (destinationRegister == sourceRegister && destinationRegister != Register.inOut)
                         {
-                            throw new AssemblyException($"Source and destination register ({destinationRegister}) are identical", destination.Column);
+                            throw destination.CreateException($"Source and destination register ({destinationRegister}) are identical");
                         }
 
                         byteCode.AddInstruction(destinationRegister, sourceRegister);
@@ -531,7 +533,7 @@ namespace OvertureAssembler
             else if (registerName.Equals("r5")) return Register.r5;
             else if (registerName.Equals(inOutRegisterName)) return Register.inOut;
 
-            throw new AssemblyException($"Unknown register name '{registerName.Span}'", registerName.Column);
+            throw registerName.CreateException($"Unknown register name '{registerName.Span}'");
         }
 
         private ref struct Tokenizer
