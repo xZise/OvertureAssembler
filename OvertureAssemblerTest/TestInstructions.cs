@@ -66,6 +66,8 @@ namespace OvertureAssemblerTest
             Assembler assembler = new();
             byte[] byteCode = assembler.Assemble([instruction]);
             Assert.Equal([expectedByteCode], byteCode);
+            Assert.Empty(assembler.AssemblyMessages);
+            Assert.False(assembler.Failed);
         }
 
         public static TheoryData<byte, string> ImmediateValues()
