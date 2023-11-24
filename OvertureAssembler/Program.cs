@@ -89,6 +89,7 @@ namespace OvertureAssembler
         {
             Console.WriteLine($"Data operations:");
             Console.WriteLine($"  mov <dest> <src> - copies the value from register 'src' to 'dest'. Can be any register r0 to r5 and in (src only) or out (dest only).");
+            Console.WriteLine($"                     (src and dest must be different when they aren't in and out)");
             Console.WriteLine($"  li <imm>         - loads the immediate value ('imm') into register 0. The immediate must be in range 0 to {MaxImmediate}.");
             Console.WriteLine();
             Console.WriteLine($"Arithmetic operations");
@@ -343,6 +344,11 @@ namespace OvertureAssembler
 
                         Register destinationRegister = ParseRegisterName(destination, OutputRegisterName);
                         Register sourceRegister = ParseRegisterName(source, InputRegisterName);
+
+                        if (destinationRegister == sourceRegister && destinationRegister != Register.inOut)
+                        {
+                            throw new AssemblyException($"Source and destination register ({destinationRegister}) are identical", destination.Column);
+                        }
 
                         byteCode.AddInstruction(destinationRegister, sourceRegister);
                     }

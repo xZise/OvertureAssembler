@@ -87,5 +87,19 @@ namespace OvertureAssemblerTest
             }
             return immediateInstructions;
         }
+
+        [Fact]
+        public void TestIdentical()
+        {
+            Assembler assembler = new();
+            byte[] byteCode = assembler.Assemble(["mov r1 r1"]);
+            Utils.AssertError(assembler, "Source and destination register (r1) are identical", 1, 5);
+
+            // Exception: in -> out is valid
+            byteCode = assembler.Assemble(["mov out in"]);
+            Assert.Equal([0b10_110_110], byteCode);
+            Assert.Empty(assembler.AssemblyMessages);
+            Assert.False(assembler.Failed);
+        }
     }
 }
