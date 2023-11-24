@@ -126,6 +126,8 @@ namespace OvertureAssembler
             public readonly ReadOnlySpan<char> Span;
             public readonly int Column;
 
+            public readonly bool Exists => Span.Length > 0;
+
             public Token(ReadOnlySpan<char> span, int column)
             {
                 Span = span;
@@ -297,7 +299,7 @@ namespace OvertureAssembler
                 {
                     Token token = tokenizer.NextToken();
 
-                    if (token.Span.Length == 0)
+                    if (!token.Exists)
                     {
                         continue;
                     }
@@ -319,7 +321,7 @@ namespace OvertureAssembler
                         tokenizer.NextChar();
                     }
 
-                    if (token.Span.Length == 0)
+                    if (!token.Exists)
                     {
                         continue;
                     }
@@ -381,7 +383,7 @@ namespace OvertureAssembler
                         }
 
                         Token labelName = tokenizer.NextToken();
-                        if (labelName.Span.Length > 0)
+                        if (labelName.Exists)
                         {
                             Label label = GetLabel(labelName.Span.ToString());
                             byte offset = 0;
