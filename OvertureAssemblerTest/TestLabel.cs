@@ -10,6 +10,7 @@ namespace OvertureAssemblerTest
             Assembler assembler = new();
             byte[] code = assembler.Assemble(["j missing"]);
             Assert.Empty(code);
+            Utils.AssertError(assembler, "Unknown label 'missing' referenced.", 1, 3);
         }
 
         [Fact]
@@ -22,7 +23,7 @@ namespace OvertureAssemblerTest
             lines.Add("missing: mov r1 r2");
             byte[] code = assembler.Assemble(lines.ToArray());
             Assert.Empty(code);
-            AssertError(assembler, "Location of label 'missing' is outside of the maximum immediate possible.", 33, 1);
+            Utils.AssertError(assembler, "Location of label 'missing' is outside of the maximum immediate possible.", 33, 1);
         }
 
         [Fact]
@@ -31,6 +32,8 @@ namespace OvertureAssemblerTest
             Assembler assembler = new();
             byte[] code = assembler.Assemble(["j forward", "forward: mov r1 r2"]);
             Assert.Equal([0b00_000010, 0b11_000100, 0b10_010001], code);
+            Assert.Empty(assembler.AssemblyMessages);
+            Assert.False(assembler.Failed);
         }
 
         [Fact]
@@ -39,17 +42,8 @@ namespace OvertureAssemblerTest
             Assembler assembler = new();
             byte[] code = assembler.Assemble(["backward: mov r1 r2", "j backward"]);
             Assert.Equal([0b10_010001, 0b00_000000, 0b11_000100], code);
-            AssertError(assembler, "Unknown label 'missing' referenced.", 1, 3);
-        }
-
-        private static void AssertError(Assembler assembler, string message, int lineNumber, int column)
-        {
-            Assert.NotEmpty(assembler.AssemblyMessages);
-            Assembler.AssemblyMessage assemblyMessage = assembler.AssemblyMessages[0];
-            Assert.True(assemblyMessage.IsError);
-            Assert.Equal(message, assemblyMessage.Message);
-            Assert.Equal(lineNumber, assemblyMessage.Location.LineNumber);
-            Assert.Equal(column, assemblyMessage.Location.Column);
+            Assert.Empty(assembler.AssemblyMessages);
+            Assert.False(assembler.Failed);
         }
     }
 }
