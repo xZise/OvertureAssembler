@@ -76,6 +76,7 @@ namespace OvertureAssembler
             Console.WriteLine($"Data operations:");
             Console.WriteLine($"  mov <dest> <src> - copies the value from register 'src' to 'dest'. Can be any register r0 to r5 and in (src only) or out (dest only).");
             Console.WriteLine($"  li <imm>         - loads the immediate value ('imm') into register 0. The immediate must be in range 0 to {MaxImmediate}.");
+            Console.WriteLine();
             Console.WriteLine($"Arithmetic operations");
             Console.WriteLine($"  or   - copies the result of 'bitwise or' between 'r1' and 'r2' into 'r3'");
             Console.WriteLine($"  nor  - copies the result of 'bitwise nor' between 'r1' and 'r2' into 'r3'");
@@ -83,6 +84,7 @@ namespace OvertureAssembler
             Console.WriteLine($"  nand - copies the result of 'bitwise nand' between 'r1' and 'r2' into 'r3'");
             Console.WriteLine($"  add  - copies the sum of 'r1' and 'r2' into 'r3'");
             Console.WriteLine($"  sub  - copies the difference between 'r1' and 'r2' into 'r3'");
+            Console.WriteLine();
             Console.WriteLine($"Conditional operations");
             Console.WriteLine($"  j [lbl]    - Makes an unconditional jump to the instruction address of 'r0' or 'lbl'");
             Console.WriteLine($"  je [lbl]   - When 'r3' is equal to 0, jumps to the instruction address of 'r0' or 'lbl'");
