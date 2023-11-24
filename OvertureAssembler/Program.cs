@@ -131,6 +131,8 @@ namespace OvertureAssembler
                 Span = span;
                 Column = column;
             }
+
+            public bool Equals(string name) => MemoryExtensions.Equals(Span, name, StringComparison.InvariantCulture);
         }
 
         public class Label(string name)
@@ -310,7 +312,7 @@ namespace OvertureAssembler
                         continue;
                     }
 
-                    if (MemoryExtensions.Equals(token.Span, "li", StringComparison.InvariantCulture))
+                    if (token.Equals("li"))
                     {
                         Token value = tokenizer.NextToken();
                         if (!TryParse(value.Span, out byte immediateValue) || immediateValue > MaxImmediate)
@@ -320,7 +322,7 @@ namespace OvertureAssembler
 
                         byteCode.AddInstruction(immediateValue);
                     }
-                    else if (MemoryExtensions.Equals(token.Span, "mov", StringComparison.InvariantCulture))
+                    else if (token.Equals("mov"))
                     {
                         Token destination = tokenizer.NextToken();
                         Token source = tokenizer.NextToken();
@@ -333,31 +335,31 @@ namespace OvertureAssembler
                     else if (token.Span.Length >= 1 && token.Span[0] == 'j')
                     {
                         Condition condition;
-                        if (MemoryExtensions.Equals(token.Span, "j", StringComparison.InvariantCulture))
+                        if (token.Equals("j"))
                         {
                             condition = Condition.Unconditional;
                         }
-                        else if (MemoryExtensions.Equals(token.Span, "je", StringComparison.InvariantCulture))
+                        else if (token.Equals("je"))
                         {
                             condition = Condition.Equal;
                         }
-                        else if (MemoryExtensions.Equals(token.Span, "jne", StringComparison.InvariantCulture))
+                        else if (token.Equals("jne"))
                         {
                             condition = Condition.NotEqual;
                         }
-                        else if (MemoryExtensions.Equals(token.Span, "jgt", StringComparison.InvariantCulture))
+                        else if (token.Equals("jgt"))
                         {
                             condition = Condition.GreaterThan;
                         }
-                        else if (MemoryExtensions.Equals(token.Span, "jgte", StringComparison.InvariantCulture))
+                        else if (token.Equals("jgte"))
                         {
                             condition = Condition.GreaterThanEqual;
                         }
-                        else if (MemoryExtensions.Equals(token.Span, "jlt", StringComparison.InvariantCulture))
+                        else if (token.Equals("jlt"))
                         {
                             condition = Condition.LessThan;
                         }
-                        else if (MemoryExtensions.Equals(token.Span, "jlte", StringComparison.InvariantCulture))
+                        else if (token.Equals("jlte"))
                         {
                             condition = Condition.LessThanEqual;
                         }
@@ -381,27 +383,27 @@ namespace OvertureAssembler
 
                         byteCode.AddInstruction(condition);
                     }
-                    else if (MemoryExtensions.Equals(token.Span, "and", StringComparison.InvariantCulture))
+                    else if (token.Equals("and"))
                     {
                         byteCode.AddInstruction(Arithmetic.And);
                     }
-                    else if (MemoryExtensions.Equals(token.Span, "nand", StringComparison.InvariantCulture))
+                    else if (token.Equals("nand"))
                     {
                         byteCode.AddInstruction(Arithmetic.Nand);
                     }
-                    else if (MemoryExtensions.Equals(token.Span, "or", StringComparison.InvariantCulture))
+                    else if (token.Equals("or"))
                     {
                         byteCode.AddInstruction(Arithmetic.Or);
                     }
-                    else if (MemoryExtensions.Equals(token.Span, "nor", StringComparison.InvariantCulture))
+                    else if (token.Equals("nor"))
                     {
                         byteCode.AddInstruction(Arithmetic.Nor);
                     }
-                    else if (MemoryExtensions.Equals(token.Span, "add", StringComparison.InvariantCulture))
+                    else if (token.Equals("add"))
                     {
                         byteCode.AddInstruction(Arithmetic.Add);
                     }
-                    else if (MemoryExtensions.Equals(token.Span, "sub", StringComparison.InvariantCulture))
+                    else if (token.Equals("sub"))
                     {
                         byteCode.AddInstruction(Arithmetic.Sub);
                     }
@@ -505,13 +507,13 @@ namespace OvertureAssembler
 
         private static Register ParseRegisterName(Token registerName, string inOutRegisterName)
         {
-            if (MemoryExtensions.Equals(registerName.Span, "r0", StringComparison.InvariantCulture)) return Register.r0;
-            else if (MemoryExtensions.Equals(registerName.Span, "r1", StringComparison.InvariantCulture)) return Register.r1;
-            else if (MemoryExtensions.Equals(registerName.Span, "r2", StringComparison.InvariantCulture)) return Register.r2;
-            else if (MemoryExtensions.Equals(registerName.Span, "r3", StringComparison.InvariantCulture)) return Register.r3;
-            else if (MemoryExtensions.Equals(registerName.Span, "r4", StringComparison.InvariantCulture)) return Register.r4;
-            else if (MemoryExtensions.Equals(registerName.Span, "r5", StringComparison.InvariantCulture)) return Register.r5;
-            else if (MemoryExtensions.Equals(registerName.Span, inOutRegisterName, StringComparison.InvariantCulture)) return Register.inOut;
+            if (registerName.Equals("r0")) return Register.r0;
+            else if (registerName.Equals("r1")) return Register.r1;
+            else if (registerName.Equals("r2")) return Register.r2;
+            else if (registerName.Equals("r3")) return Register.r3;
+            else if (registerName.Equals("r4")) return Register.r4;
+            else if (registerName.Equals("r5")) return Register.r5;
+            else if (registerName.Equals(inOutRegisterName)) return Register.inOut;
 
             throw new AssemblyException($"Unknown register name '{registerName.Span}'", registerName.Column);
         }
