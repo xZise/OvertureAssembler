@@ -308,7 +308,6 @@ namespace OvertureAssembler
                         {
                             throw new InvalidOperationException($"Unknown token '{token}'");
                         }
-                        byteCode.AddInstruction(condition);
 
                         ReadOnlySpan<char> labelName = tokenizer.NextToken();
                         if (labelName.Length > 0)
@@ -322,6 +321,8 @@ namespace OvertureAssembler
                             }
                             label.References.Add(new(offset, lineNumber));
                         }
+
+                        byteCode.AddInstruction(condition);
                     }
                     else if (MemoryExtensions.Equals(token, "and", StringComparison.InvariantCulture))
                     {
