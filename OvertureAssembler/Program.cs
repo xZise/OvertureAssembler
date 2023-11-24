@@ -269,6 +269,18 @@ namespace OvertureAssembler
             }
         }
 
+        private void AddWarning(FileLocation location, string Message)
+        {
+            AssemblyMessage message = new(location, false, Message);
+            messages.Add(message);
+        }
+
+        private void AddError(FileLocation location, string Message)
+        {
+            AssemblyMessage message = new(location, true, Message);
+            messages.Add(message);
+        }
+
         public byte[] Assemble(string[] lines)
         {
             labels.Clear();
@@ -414,8 +426,7 @@ namespace OvertureAssembler
                 }
                 catch (AssemblyException ex)
                 {
-                    AssemblyMessage message = new(new(lineNumber, ex.Column), true, ex.Message);
-                    messages.Add(message);
+                    AddError(new(lineNumber, ex.Column), ex.Message);
 
                     // As soon as one error occurred, we still try to assemble the following instructions, but do not
                     // output any result (only further warnings or errors).
@@ -431,15 +442,13 @@ namespace OvertureAssembler
                 {
                     foreach (Reference reference in label.References)
                     {
-                        AssemblyMessage message = new(reference.Location, true, $"Unknown label '{label.Name}' referenced.");
-                        messages.Add(message);
+                        AddError(reference.Location, $"Unknown label '{label.Name}' referenced.");
                         byteCode.Fail();
                     }
                 }
                 else if (label.References.Count == 0)
                 {
-                    AssemblyMessage message = new(label.Offset.Value.Location, false, $"Unreferenced label '{label.Name}'.");
-                    messages.Add(message);
+                    AddWarning(label.Offset.Value.Location, $"Unreferenced label '{label.Name}'.");
                 }
                 else
                 {
@@ -449,8 +458,7 @@ namespace OvertureAssembler
                         if (absoluteOffset > Assembler.MaxImmediate)
                         {
                             byteCode.Fail();
-                            AssemblyMessage message = new(label.Offset.Value.Location, true, $"Location of label '{label.Name}' is outside of the maximum immediate possible.");
-                            messages.Add(message);
+                            AddError(label.Offset.Value.Location, $"Location of label '{label.Name}' is outside of the maximum immediate possible.");
                             break;
                         }
 
