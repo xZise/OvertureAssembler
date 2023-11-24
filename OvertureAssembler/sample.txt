@@ -8,3 +8,67 @@
       li 0b00010010
       li 0B00010010
       li 18
+  another:
+      add
+      and
+      j error
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+      j another
+error:
+      xxx
+      mov r8 x

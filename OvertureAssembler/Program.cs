@@ -1,5 +1,4 @@
 ﻿using System.CommandLine;
-using System.ComponentModel.Design;
 
 namespace OvertureAssembler
 {
@@ -39,6 +38,8 @@ namespace OvertureAssembler
                         Console.WriteLine(code);
                     }
                 }
+		
+                assembler.WriteMessages();
 
                 if (outputFileValue != null)
                 {
@@ -70,6 +71,19 @@ namespace OvertureAssembler
     public class Assembler
     {
         private readonly Dictionary<string, Label> labels = new();
+        private readonly List<AssemblyMessage> messages = new();
+
+        public IReadOnlyList<AssemblyMessage> AssemblyMessages => messages.AsReadOnly();
+
+        public void WriteMessages()
+        {
+            foreach (AssemblyMessage message in messages.OrderByDescending(m => m.IsError).ThenBy(m => m.Location.LineNumber))
+            {
+                Console.WriteLine(message);
+            }
+        }
+
+        public bool Failed => messages.Any(m => m.IsError);
 
         public static void WriteInstructions()
         {
@@ -100,7 +114,24 @@ namespace OvertureAssembler
             Console.WriteLine($"- Everything after '#' is ignored.");
         }
 
-        public record struct Reference(byte Offset, int LineNumber);
+        public readonly record struct FileLocation(int LineNumber, int Column)
+        {
+            public readonly string FormatLineColumn => $"{LineNumber}:{Column}";
+        }
+
+        public readonly record struct Reference(byte Offset, FileLocation Location);
+
+        public readonly ref struct Token
+        {
+            public readonly ReadOnlySpan<char> Span;
+            public readonly int Column;
+
+            public Token(ReadOnlySpan<char> span, int column)
+            {
+                Span = span;
+                Column = column;
+            }
+        }
 
         public class Label(string name)
         {
@@ -112,7 +143,7 @@ namespace OvertureAssembler
             {
                 if (Offset.HasValue)
                 {
-                    throw new InvalidOperationException($"Multiple declarations of label '{Name}' already in line {Offset.Value.LineNumber}");
+                    throw new AssemblyException($"Multiple declarations of label '{Name}' already in {Offset.Value.Location.FormatLineColumn}", offset.Location.Column);
                 }
                 Offset = offset;
             }
@@ -213,9 +244,33 @@ namespace OvertureAssembler
             return byte.TryParse(token, numberStyle, null, out result);
         }
 
+        public class AssemblyException : Exception
+        {
+            public int Column { get; }
+
+            public AssemblyException(string? message, int column) : base(message)
+            {
+                Column = column;
+            }
+
+            public static AssemblyException UnknownToken(Token token)
+            {
+                return new AssemblyException($"Unknown token '{token.Span}'", token.Column);
+            }
+        }
+
+        public sealed record AssemblyMessage(FileLocation Location, bool IsError, string Message)
+        {
+            public override string ToString()
+            {
+                return $"{(IsError ? "Error" : "Warning")} - {Location.FormatLineColumn} - {Message}";
+            }
+        }
+
         public byte[] Assemble(string[] lines)
         {
             labels.Clear();
+            messages.Clear();
 
             Span<byte> bytes = stackalloc byte[256];
             ByteCode byteCode = new(bytes);
@@ -226,9 +281,9 @@ namespace OvertureAssembler
 
                 try
                 {
-                    ReadOnlySpan<char> token = tokenizer.NextToken();
+                    Token token = tokenizer.NextToken();
 
-                    if (token.Length == 0)
+                    if (token.Span.Length == 0)
                     {
                         continue;
                     }
@@ -237,8 +292,8 @@ namespace OvertureAssembler
                     {
                         if (tokenizer.Current == Tokenizer.LabelChar)
                         {
-                            Label label = GetLabel(token.ToString());
-                            label.SetOffset(new(byteCode.Cursor, lineNumber));
+                            Label label = GetLabel(token.Span.ToString());
+                            label.SetOffset(new(byteCode.Cursor, new(lineNumber, token.Column)));
                             tokenizer.NextChar();
                             token = tokenizer.NextToken();
                             break;
@@ -250,114 +305,115 @@ namespace OvertureAssembler
                         tokenizer.NextChar();
                     }
 
-                    if (token.Length == 0)
+                    if (token.Span.Length == 0)
                     {
                         continue;
                     }
 
-                    if (MemoryExtensions.Equals(token, "li", StringComparison.InvariantCulture))
+                    if (MemoryExtensions.Equals(token.Span, "li", StringComparison.InvariantCulture))
                     {
-                        ReadOnlySpan<char> value = tokenizer.NextToken();
-                        if (!TryParse(value, out byte immediateValue) || immediateValue > MaxImmediate)
+                        Token value = tokenizer.NextToken();
+                        if (!TryParse(value.Span, out byte immediateValue) || immediateValue > MaxImmediate)
                         {
-                            throw new InvalidOperationException($"Immediate value must be a number in range 0 - {MaxImmediate}");
+                            throw new AssemblyException($"Immediate value must be a number in range 0 - {MaxImmediate}", value.Column);
                         }
 
                         byteCode.AddInstruction(immediateValue);
                     }
-                    else if (MemoryExtensions.Equals(token, "mov", StringComparison.InvariantCulture))
+                    else if (MemoryExtensions.Equals(token.Span, "mov", StringComparison.InvariantCulture))
                     {
-                        ReadOnlySpan<char> destination = tokenizer.NextToken();
-                        ReadOnlySpan<char> source = tokenizer.NextToken();
+                        Token destination = tokenizer.NextToken();
+                        Token source = tokenizer.NextToken();
 
                         Register destinationRegister = ParseRegisterName(destination, OutputRegisterName);
                         Register sourceRegister = ParseRegisterName(source, InputRegisterName);
 
                         byteCode.AddInstruction(destinationRegister, sourceRegister);
                     }
-                    else if (token.Length >= 1 && token[0] == 'j')
+                    else if (token.Span.Length >= 1 && token.Span[0] == 'j')
                     {
                         Condition condition;
-                        if (MemoryExtensions.Equals(token, "j", StringComparison.InvariantCulture))
+                        if (MemoryExtensions.Equals(token.Span, "j", StringComparison.InvariantCulture))
                         {
                             condition = Condition.Unconditional;
                         }
-                        else if (MemoryExtensions.Equals(token, "je", StringComparison.InvariantCulture))
+                        else if (MemoryExtensions.Equals(token.Span, "je", StringComparison.InvariantCulture))
                         {
                             condition = Condition.Equal;
                         }
-                        else if (MemoryExtensions.Equals(token, "jne", StringComparison.InvariantCulture))
+                        else if (MemoryExtensions.Equals(token.Span, "jne", StringComparison.InvariantCulture))
                         {
                             condition = Condition.NotEqual;
                         }
-                        else if (MemoryExtensions.Equals(token, "jgt", StringComparison.InvariantCulture))
+                        else if (MemoryExtensions.Equals(token.Span, "jgt", StringComparison.InvariantCulture))
                         {
                             condition = Condition.GreaterThan;
                         }
-                        else if (MemoryExtensions.Equals(token, "jgte", StringComparison.InvariantCulture))
+                        else if (MemoryExtensions.Equals(token.Span, "jgte", StringComparison.InvariantCulture))
                         {
                             condition = Condition.GreaterThanEqual;
                         }
-                        else if (MemoryExtensions.Equals(token, "jlt", StringComparison.InvariantCulture))
+                        else if (MemoryExtensions.Equals(token.Span, "jlt", StringComparison.InvariantCulture))
                         {
                             condition = Condition.LessThan;
                         }
-                        else if (MemoryExtensions.Equals(token, "jlte", StringComparison.InvariantCulture))
+                        else if (MemoryExtensions.Equals(token.Span, "jlte", StringComparison.InvariantCulture))
                         {
                             condition = Condition.LessThanEqual;
                         }
                         else
                         {
-                            throw new InvalidOperationException($"Unknown token '{token}'");
+                            throw AssemblyException.UnknownToken(token);
                         }
 
-                        ReadOnlySpan<char> labelName = tokenizer.NextToken();
-                        if (labelName.Length > 0)
+                        Token labelName = tokenizer.NextToken();
+                        if (labelName.Span.Length > 0)
                         {
-                            Label label = GetLabel(labelName.ToString());
+                            Label label = GetLabel(labelName.Span.ToString());
                             byte offset = 0;
                             if (!byteCode.Failed)
                             {
                                 offset = byteCode.Cursor;
                                 byteCode.Add(0xFF);
                             }
-                            label.References.Add(new(offset, lineNumber));
+                            label.References.Add(new(offset, new(lineNumber, labelName.Column)));
                         }
 
                         byteCode.AddInstruction(condition);
                     }
-                    else if (MemoryExtensions.Equals(token, "and", StringComparison.InvariantCulture))
+                    else if (MemoryExtensions.Equals(token.Span, "and", StringComparison.InvariantCulture))
                     {
                         byteCode.AddInstruction(Arithmetic.And);
                     }
-                    else if (MemoryExtensions.Equals(token, "nand", StringComparison.InvariantCulture))
+                    else if (MemoryExtensions.Equals(token.Span, "nand", StringComparison.InvariantCulture))
                     {
                         byteCode.AddInstruction(Arithmetic.Nand);
                     }
-                    else if (MemoryExtensions.Equals(token, "or", StringComparison.InvariantCulture))
+                    else if (MemoryExtensions.Equals(token.Span, "or", StringComparison.InvariantCulture))
                     {
                         byteCode.AddInstruction(Arithmetic.Or);
                     }
-                    else if (MemoryExtensions.Equals(token, "nor", StringComparison.InvariantCulture))
+                    else if (MemoryExtensions.Equals(token.Span, "nor", StringComparison.InvariantCulture))
                     {
                         byteCode.AddInstruction(Arithmetic.Nor);
                     }
-                    else if (MemoryExtensions.Equals(token, "add", StringComparison.InvariantCulture))
+                    else if (MemoryExtensions.Equals(token.Span, "add", StringComparison.InvariantCulture))
                     {
                         byteCode.AddInstruction(Arithmetic.Add);
                     }
-                    else if (MemoryExtensions.Equals(token, "sub", StringComparison.InvariantCulture))
+                    else if (MemoryExtensions.Equals(token.Span, "sub", StringComparison.InvariantCulture))
                     {
                         byteCode.AddInstruction(Arithmetic.Sub);
                     }
                     else
                     {
-                        throw new InvalidOperationException($"Unknown token '{token}'");
+                        throw AssemblyException.UnknownToken(token);
                     }
                 }
-                catch (InvalidOperationException ex)
+                catch (AssemblyException ex)
                 {
-                    Console.WriteLine($"Assembly error in line #{lineNumber}: {ex.Message}");
+                    AssemblyMessage message = new(new(lineNumber, ex.Column), true, ex.Message);
+                    messages.Add(message);
 
                     // As soon as one error occurred, we still try to assemble the following instructions, but do not
                     // output any result (only further warnings or errors).
@@ -371,12 +427,17 @@ namespace OvertureAssembler
             {
                 if (!label.Offset.HasValue)
                 {
-                    Console.WriteLine($"Unknown label '{label.Name}' referenced in line {string.Join(", ", label.References.Select(r => r.LineNumber))}");
-                    byteCode.Fail();
+                    foreach (Reference reference in label.References)
+                    {
+                        AssemblyMessage message = new(reference.Location, true, $"Unknown label '{label.Name}' referenced.");
+                        messages.Add(message);
+                        byteCode.Fail();
+                    }
                 }
                 else if (label.References.Count == 0)
                 {
-                    Console.WriteLine($"Unreferenced label '{label.Name}' in line {label.Offset.Value.LineNumber}");
+                    AssemblyMessage message = new(label.Offset.Value.Location, false, $"Unreferenced label '{label.Name}'.");
+                    messages.Add(message);
                 }
                 else
                 {
@@ -386,7 +447,9 @@ namespace OvertureAssembler
                         if (absoluteOffset > Assembler.MaxImmediate)
                         {
                             byteCode.Fail();
-                            throw new InvalidOperationException($"Location of label '{label.Name}' is outside of the maximum immediate possible.");
+                            AssemblyMessage message = new(label.Offset.Value.Location, true, $"Location of label '{label.Name}' is outside of the maximum immediate possible.");
+                            messages.Add(message);
+                            break;
                         }
 
                         if (!byteCode.Failed)
@@ -440,17 +503,17 @@ namespace OvertureAssembler
         private const string InputRegisterName = "in";
         private const string OutputRegisterName = "out";
 
-        private static Register ParseRegisterName(ReadOnlySpan<char> registerName, string inOutRegisterName)
+        private static Register ParseRegisterName(Token registerName, string inOutRegisterName)
         {
-            if (MemoryExtensions.Equals(registerName, "r0", StringComparison.InvariantCulture)) return Register.r0;
-            else if (MemoryExtensions.Equals(registerName, "r1", StringComparison.InvariantCulture)) return Register.r1;
-            else if (MemoryExtensions.Equals(registerName, "r2", StringComparison.InvariantCulture)) return Register.r2;
-            else if (MemoryExtensions.Equals(registerName, "r3", StringComparison.InvariantCulture)) return Register.r3;
-            else if (MemoryExtensions.Equals(registerName, "r4", StringComparison.InvariantCulture)) return Register.r4;
-            else if (MemoryExtensions.Equals(registerName, "r5", StringComparison.InvariantCulture)) return Register.r5;
-            else if (MemoryExtensions.Equals(registerName, inOutRegisterName, StringComparison.InvariantCulture)) return Register.inOut;
+            if (MemoryExtensions.Equals(registerName.Span, "r0", StringComparison.InvariantCulture)) return Register.r0;
+            else if (MemoryExtensions.Equals(registerName.Span, "r1", StringComparison.InvariantCulture)) return Register.r1;
+            else if (MemoryExtensions.Equals(registerName.Span, "r2", StringComparison.InvariantCulture)) return Register.r2;
+            else if (MemoryExtensions.Equals(registerName.Span, "r3", StringComparison.InvariantCulture)) return Register.r3;
+            else if (MemoryExtensions.Equals(registerName.Span, "r4", StringComparison.InvariantCulture)) return Register.r4;
+            else if (MemoryExtensions.Equals(registerName.Span, "r5", StringComparison.InvariantCulture)) return Register.r5;
+            else if (MemoryExtensions.Equals(registerName.Span, inOutRegisterName, StringComparison.InvariantCulture)) return Register.inOut;
 
-            throw new InvalidOperationException($"Unknown register name '{registerName}'");
+            throw new AssemblyException($"Unknown register name '{registerName.Span}'", registerName.Column);
         }
 
         private ref struct Tokenizer
@@ -485,11 +548,11 @@ namespace OvertureAssembler
                 return false;
             }
 
-            public ReadOnlySpan<char> NextToken()
+            public Token NextToken()
             {
                 if (AtEnd)
                 {
-                    return [];
+                    return new();
                 }
 
                 while (!AtEnd && char.IsWhiteSpace(Current))
@@ -508,7 +571,7 @@ namespace OvertureAssembler
 
                 CheckComment();
 
-                return Line.AsSpan(startIndex, endIndex - startIndex);
+                return new(Line.AsSpan(startIndex, endIndex - startIndex), startIndex + 1);
             }
         }
     }
