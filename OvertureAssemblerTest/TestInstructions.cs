@@ -101,5 +101,26 @@ namespace OvertureAssemblerTest
             Assert.Empty(assembler.AssemblyMessages);
             Assert.False(assembler.Failed);
         }
+
+        [Fact]
+        public void TestMissingParameter()
+        {
+            Assembler assembler = new();
+            byte[] byteCode = assembler.Assemble(["mov r0"]);
+            Assert.Empty(byteCode);
+            Utils.AssertError(assembler, "Unknown register name ''", 1, 7);
+        }
+
+        [Theory]
+        [InlineData("mov r0 r8", 8)]
+        [InlineData("mov r8 r0", 5)]
+        [InlineData("mov r8 r8", 5)]
+        public void TestInvalidParameter(string instruction, int column)
+        {
+            Assembler assembler = new();
+            byte[] byteCode = assembler.Assemble([instruction]);
+            Assert.Empty(byteCode);
+            Utils.AssertError(assembler, "Unknown register name 'r8'", 1, column);
+        }
     }
 }

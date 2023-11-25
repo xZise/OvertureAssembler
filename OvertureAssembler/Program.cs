@@ -572,7 +572,7 @@ namespace OvertureAssembler
             {
                 if (AtEnd)
                 {
-                    return new();
+                    return new([], Line.Length + 1);
                 }
 
                 while (!AtEnd && char.IsWhiteSpace(Current))
